@@ -1,0 +1,10 @@
+{
+    "Boston Celtics": {
+        "starter_score": 8,
+        "injury_penalty": -0.05
+    },
+    "Manchester City": {
+        "starter_score": 8.5,
+        "injury_penalty": -0.02
+    }
+}
