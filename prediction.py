@@ -1,24 +1,25 @@
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-import schedule
-import time
 import os
+import json
 
-print("--- 啟動全自動量化預測與雲端備份系統 ---\n")
+print("--- 啟動量化預測系統 (單次手動執行版) ---\n")
 
 def run_prediction_system():
-    # 1. 設定目標日期
+    # 1. 設定要抓取的日期 (days=1 抓明天賽事)
     target_date = datetime.now() + timedelta(days=1)
     date_str = target_date.strftime("%Y%m%d")
-    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚀 開始執行 {date_str} 賽事預測任務...")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚀 開始執行 {date_str} 賽事預測任務...\n")
 
+    # 2. 跨聯賽 API 設定
     leagues = {
         "NBA": {"url": f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={date_str}", "symbol": "🏀"},
         "MLB": {"url": f"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates={date_str}", "symbol": "⚾"},
         "EPL": {"url": f"https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?dates={date_str}", "symbol": "⚽"}
     }
 
+    # 3. 球隊中文對照表
     team_translations = {
         "Boston Celtics": "波士頓塞爾提克", "Dallas Mavericks": "達拉斯獨行俠",
         "New York Yankees": "紐約洋基", "Los Angeles Dodgers": "洛杉磯道奇",
@@ -27,13 +28,16 @@ def run_prediction_system():
         "Detroit Pistons": "底特律活塞", "Cleveland Cavaliers": "克里夫蘭騎士"
     }
 
-    daily_intel = {
-        "Boston Celtics": {"starter_score": 9, "injury_penalty": 0.0},
-        "Dallas Mavericks": {"starter_score": 8, "injury_penalty": -0.03},
-        "Arsenal": {"starter_score": 9, "injury_penalty": 0.0},
-        "Manchester City": {"starter_score": 9, "injury_penalty": -0.02}
-    }
+    # 4. 自動讀取外部情報庫 (由 scraper.py 生成)
+    try:
+        with open("daily_intel_db.json", "r", encoding="utf-8") as f:
+            daily_intel = json.load(f)
+        print("📥 成功讀取最新情報庫 (daily_intel_db.json)！\n")
+    except FileNotFoundError:
+        print("⚠️ 找不到情報庫檔案，將使用預設空情報。\n")
+        daily_intel = {}
 
+    # 5. 盤口與賠率精算引擎
     def calculate_bookmaker_model(league, h_name_en, h_record, a_name_en, a_record):
         try:
             h_wins = int(h_record.split('-')[0]) if '-' in h_record else 0
@@ -102,7 +106,10 @@ def run_prediction_system():
             return 50.0, 50.0, 0.0, 1.90, 1.90, "-", "平手 (0)", "-"
 
     all_games_list = []
+    
+    # 6. 開始執行抓取
     for league_name, info in leagues.items():
+        print(f"正在抓取 {league_name} 數據...")
         response = requests.get(info["url"])
         if response.status_code == 200:
             events = response.json().get('events', [])
@@ -142,32 +149,21 @@ def run_prediction_system():
                         "推薦": rec_pick
                     })
 
+    # 7. 報表輸出與自動雲端備份
     if all_games_list:
         df = pd.DataFrame(all_games_list)
         filename = f"advanced_odds_{date_str}.csv"
         df.to_csv(filename, index=False, encoding="utf-8-sig")
-        print(f"💾 檔案已儲存為 '{filename}'")
+        print(f"\n✅ 成功！檔案已儲存為 '{filename}'")
         
-        # ------------------ 核心魔法：自動操控 Git 上傳 ------------------
-        print("☁️ 正在將新數據同步至 GitHub 雲端備份...")
+        print("☁️ 正在同步至 GitHub...")
         os.system('git add .')
-        os.system(f'git commit -m "自動更新 {date_str} 盤口預測數據"')
+        os.system(f'git commit -m "手動更新 {date_str} 盤口預測數據"')
         os.system('git push')
-        print("✅ 雲端備份完成！")
+        print("🎉 雲端備份完成！程式執行結束。")
     else:
-        print(f"目前無 {date_str} 賽事數據。")
+        print(f"\n目前無 {date_str} 賽事數據。程式執行結束。")
 
-# --- 系統排程控制台 ---
-# 1. 程式啟動時，先立刻跑一次測試
-run_prediction_system()
-
-# 2. 設定未來每天早上 08:00 自動執行
-schedule.every().day.at("08:00").do(run_prediction_system)
-
-print("\n⏳ 系統已進入全自動守護模式。您可以將此視窗縮小，程式將在每天早上 8 點自動執行。")
-print("（若要強制停止，請在終端機內按下 Ctrl + C）")
-
-# 3. 讓程式保持清醒，不斷檢查時間是否到了
-while True:
-    schedule.run_pending()
-    time.sleep(60) # 每 60 秒檢查一次手錶
+# 這裡把排程拔掉了，程式只會從這裡單純地呼叫執行一次
+if __name__ == "__main__":
+    run_prediction_system()
