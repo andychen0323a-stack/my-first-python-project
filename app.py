@@ -41,4 +41,4 @@ else:
         
     # 5. 在網頁正中央顯示「超級互動式表格」
     st.write(f"共找到 **{len(filtered_df)}** 場符合條件的賽事：")
-   st.dataframe(filtered_df, width='stretch', height=600)
+    st.dataframe(filtered_df, width='stretch', height=600)
