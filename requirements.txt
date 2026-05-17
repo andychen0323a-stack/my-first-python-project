@@ -1,5 +1,6 @@
-requests
-pandas
-beautifulsoup4
 streamlit
-schedule
+pandas
+requests
+beautifulsoup4
+scikit-learn
+plotly
