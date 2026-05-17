@@ -2,43 +2,65 @@ import streamlit as st
 import pandas as pd
 import glob
 import os
+import plotly.express as px
 
-# 1. 設定網頁基本外觀
-st.set_page_config(page_title="AI 體育盤口預測系統", layout="wide")
-st.title("📊 跨聯賽 AI 盤口與波膽預測儀表板")
-st.markdown("這是一個自動讀取最新 CSV 數據，並允許您自由篩選、排序的預測分析平台。")
+# 1. 頁面基本設定 (寬螢幕模式)
+st.set_page_config(page_title="AI 體育量化預測", page_icon="📈", layout="wide")
+st.title("📈 體育 AI 量化決策終端機")
+st.markdown("---")
 
-# 2. 自動尋找同資料夾下「最新」的 CSV 預測檔案
+# 2. 自動尋找最新的預測報表
 csv_files = glob.glob("advanced_odds_*.csv")
-
 if not csv_files:
-    st.error("⚠️ 找不到任何預測數據檔案！請先執行您的 prediction.py 來產生資料。")
+    st.warning("⚠️ 目前尚未產生任何賽事數據，請等待雲端機器人執行或手動觸發。")
 else:
-    # 找出日期最新的檔案
-    latest_file = max(csv_files, key=os.path.getmtime)
-    st.success(f"📥 目前成功連線至最新資料庫：{latest_file}")
+    # 找到日期最新的檔案
+    latest_file = max(csv_files, key=os.path.getctime)
+    df = pd.DataFrame(pd.read_csv(latest_file))
     
-    # 讀取 CSV 成為表格
-    df = pd.read_csv(latest_file)
+    date_str = latest_file.split('_')[2].split('.')[0]
+    st.success(f"✅ 成功載入最新數據：**{date_str[:4]}年{date_str[4:6]}月{date_str[6:]}日**")
+
+    # 3. 數據清洗：提取凱利資金比例作為圖表 Y 軸
+    # 將 "主投 10.5%" 轉換為數字 10.5
+    def extract_kelly_fund(val):
+        if "觀望" in val or "和局" in val: return 0.0
+        try: return float(val.split(" ")[1].replace("%", ""))
+        except: return 0.0
+
+    df['投資價值(%)'] = df['資金分配'].apply(extract_kelly_fund)
     
-    # 3. 建立網頁左側的「搜尋與篩選」選單
-    st.sidebar.header("🔍 快速篩選器")
+    # 4. 頂部數據儀表板 (Metrics)
+    col1, col2, col3 = st.columns(3)
+    valuable_bets = df[df['投資價值(%)'] > 0]
     
-    # 篩選聯賽
-    league_options = ["顯示全部"] + list(df['聯賽'].unique())
-    selected_league = st.sidebar.selectbox("選擇特定聯賽：", league_options)
-    
-    # 篩選推薦押注方向
-    pick_options = ["顯示全部"] + list(df['推薦'].unique())
-    selected_pick = st.sidebar.selectbox("選擇推薦方向：", pick_options)
-    
-    # 4. 根據使用者的選擇，過濾表格資料
-    filtered_df = df.copy()
-    if selected_league != "顯示全部":
-        filtered_df = filtered_df[filtered_df['聯賽'] == selected_league]
-    if selected_pick != "顯示全部":
-        filtered_df = filtered_df[filtered_df['推薦'] == selected_pick]
-        
-    # 5. 在網頁正中央顯示「超級互動式表格」
-    st.write(f"共找到 **{len(filtered_df)}** 場符合條件的賽事：")
-    st.dataframe(filtered_df, width='stretch', height=600)
+    col1.metric("今日分析總賽事", f"{len(df)} 場")
+    col2.metric("發現高價值盤口 (EV>0)", f"{len(valuable_bets)} 場", "+ 獲利機會")
+    col3.metric("最高建議本金佔比", f"{df['投資價值(%)'].max()}%" if len(valuable_bets) > 0 else "0%")
+
+    # 5. 視覺化圖表：今日高價值賽事投資比重
+    if not valuable_bets.empty:
+        st.subheader("📊 今日 AI 資金配置建議")
+        fig = px.bar(
+            valuable_bets, 
+            x='對戰組合', 
+            y='投資價值(%)', 
+            color='聯賽',
+            text='資金分配',
+            title='各賽事建議投入資金比例',
+            template='plotly_dark'
+        )
+        fig.update_traces(textposition='outside')
+        st.plotly_chart(fig, use_container_width=True)
+
+    # 6. 互動式數據表格
+    st.subheader("📋 完整賽事精算明細")
+    # 增加過濾器
+    selected_league = st.selectbox("過濾聯賽", ["全部"] + list(df['聯賽'].unique()))
+    if selected_league != "全部":
+        df_display = df[df['聯賽'] == selected_league]
+    else:
+        df_display = df
+
+    # 隱藏用來畫圖的輔助欄位，顯示乾淨的表格
+    st.dataframe(df_display.drop(columns=['投資價值(%)']), use_container_width=True, height=500)
