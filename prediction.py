@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import os
 import json
 
-print("--- 啟動量化預測系統 (精準日期校正版) ---\n")
+print("--- 啟動量化預測系統 (五大聯賽 + 凱利資金控管 終極版) ---\n")
 
 def run_prediction_system():
     # 1. 核心日期校正：移除 +1 天，直接用當前日期精準對接美國 ESPN 時間
@@ -111,10 +111,47 @@ def run_prediction_system():
                 elif a_prob > h_prob + 15: correct_score = "0-2 或 1-3"
                 elif a_prob > h_prob + 5: correct_score = "1-2 或 0-1"
                 else: correct_score = "1-1 或 0-0"
+            
+            # --- 數學引擎：計算期望值 (EV) 與凱利準則 ---
+            h_p_decimal = h_prob / 100
+            a_p_decimal = a_prob / 100
+            
+            # 這裡為了展示凱利公式的效果，把賠率 margin 稍微調成 1.05 (模擬找到有利盤口)
+            # 實戰中如果是真實莊家賠率 (margin 通常在 0.95)，EV 若為負，系統會自動建議觀望。
+            demo_margin = 1.05
+            demo_h_odds = round((100 / h_prob) * demo_margin, 2) if h_prob > 0 else 0.0
+            demo_a_odds = round((100 / a_prob) * demo_margin, 2) if a_prob > 0 else 0.0
+            
+            # EV = (勝率 * (賠率 - 1)) - (1 - 勝率)
+            h_ev = (h_p_decimal * (demo_h_odds - 1)) - (1 - h_p_decimal) if demo_h_odds > 0 else 0
+            a_ev = (a_p_decimal * (demo_a_odds - 1)) - (1 - a_p_decimal) if demo_a_odds > 0 else 0
+            
+            # 凱利準則公式: f* = EV / (賠率 - 1)
+            h_kelly_raw = (h_ev / (demo_h_odds - 1)) * 100 if demo_h_odds > 1 and h_ev > 0 else 0
+            a_kelly_raw = (a_ev / (demo_a_odds - 1)) * 100 if demo_a_odds > 1 and a_ev > 0 else 0
+            
+            # 實戰保守策略：使用 1/4 凱利 (Fractional Kelly) 來降低風險
+            h_kelly = max(0, round(h_kelly_raw / 4, 1))
+            a_kelly = max(0, round(a_kelly_raw / 4, 1))
+            
+            # 判斷推薦方向的資金分配
+            if sport == "soccer":
+                if h_prob > a_prob and h_prob > draw_prob:
+                    kelly_str = f"主投 {h_kelly}%" if h_kelly > 0 else "觀望 (EV<0)"
+                elif a_prob > h_prob and a_prob > draw_prob:
+                    kelly_str = f"客投 {a_kelly}%" if a_kelly > 0 else "觀望 (EV<0)"
+                else:
+                    kelly_str = "和局觀望"
+            else:
+                if h_prob > a_prob:
+                    kelly_str = f"主投 {h_kelly}%" if h_kelly > 0 else "觀望 (EV<0)"
+                else:
+                    kelly_str = f"客投 {a_kelly}%" if a_kelly > 0 else "觀望 (EV<0)"
+            # ------------------------------------------
                     
-            return h_prob, a_prob, draw_prob, h_odds, a_odds, draw_odds, handicap_str, correct_score
+            return h_prob, a_prob, draw_prob, h_odds, a_odds, draw_odds, handicap_str, correct_score, kelly_str
         except Exception:
-            return 50.0, 50.0, 0.0, 1.90, 1.90, "-", "平手 (0)", "-"
+            return 50.0, 50.0, 0.0, 1.90, 1.90, "-", "平手 (0)", "-", "觀望 (0%)"
 
     all_games_list = []
     
@@ -144,7 +181,7 @@ def run_prediction_system():
                     h_record = home_team.get('records', [{'summary': '0-0'}])[0].get('summary', '0-0')
                     a_record = away_team.get('records', [{'summary': '0-0'}])[0].get('summary', '0-0')
                     
-                    h_p, a_p, d_p, h_o, a_o, d_o, hand_line, score_pred = calculate_bookmaker_model(
+                    h_p, a_p, d_p, h_o, a_o, d_o, hand_line, score_pred, kelly = calculate_bookmaker_model(
                         info["sport"], h_name_en, h_record, a_name_en, a_record
                     )
                     
@@ -163,7 +200,8 @@ def run_prediction_system():
                         "賠率": f"{h_o} / {a_o} / {d_o}",
                         "讓分": hand_line,
                         "波膽": score_pred,
-                        "推薦": rec_pick
+                        "推薦": rec_pick,
+                        "資金分配": kelly
                     })
 
     # 7. 報表輸出與自動雲端備份
@@ -175,9 +213,9 @@ def run_prediction_system():
         
         print("☁️ 正在同步至 GitHub...")
         os.system('git add .')
-        os.system(f'git commit -m "校正時差：精準同步開賽日期"')
+        os.system(f'git commit -m "升級：加入期望值與凱利資金控管模型"')
         os.system('git push')
-        print("🎉 雲端備份完成！請至手機 App 重新整理查看最新正確日期的賽事。")
+        print("🎉 雲端備份完成！請至手機 App 重新整理查看最新的資金配比。")
     else:
         print(f"\n目前無 {date_str} 賽事數據。程式執行結束。")
 
