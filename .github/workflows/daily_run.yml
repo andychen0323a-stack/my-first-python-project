@@ -1,12 +1,13 @@
 name: 體育AI 每日自動化運算
 
-# 設定觸發時間 (這是最重要的部分)
 on:
   schedule:
-    # 每天早上 8 點 (台灣時間 UTC+8) 自動執行。在 UTC 標準時間是凌晨 0 點。
     - cron: '0 0 * * *'
-  # 允許我們在 GitHub 網頁上手動點擊測試
   workflow_dispatch:
+
+# 👉 關鍵修復：發給機器人「寫入」檔案的專屬通行證
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -14,10 +15,10 @@ jobs:
 
     steps:
       - name: 📥 下載您的最新程式碼
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # 升級至 v4，消除黃色警告
 
       - name: ⚙️ 架設 Python 雲端環境
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # 升級至 v5，消除黃色警告
         with:
           python-version: '3.10'
 
