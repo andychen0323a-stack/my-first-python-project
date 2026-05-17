@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import os
 import json
 
-print("--- 啟動量化預測系統 (單次手動執行版) ---\n")
+print("--- 啟動量化預測系統 (台灣時間升級版) ---\n")
 
 def run_prediction_system():
     # 1. 設定要抓取的日期 (days=1 抓明天賽事)
@@ -116,7 +116,13 @@ def run_prediction_system():
             for event in events:
                 status = event['competitions'][0]['status']['type']['state']
                 if status == 'pre':
-                    game_time = event['date'][:16].replace('T', ' ')
+                    # --- 核心更新：國際時間轉台灣時間 (UTC+8) ---
+                    raw_time = event['date'].replace('Z', '')
+                    utc_time = datetime.strptime(raw_time[:16], "%Y-%m-%dT%H:%M")
+                    tw_time = utc_time + timedelta(hours=8)
+                    game_time = tw_time.strftime("%m/%d %H:%M") # 轉換為 月/日 時:分
+                    # ------------------------------------------
+                    
                     competitors = event['competitions'][0]['competitors']
                     home_team = next(c for c in competitors if c['homeAway'] == 'home')
                     away_team = next(c for c in competitors if c['homeAway'] == 'away')
@@ -140,7 +146,7 @@ def run_prediction_system():
                     
                     all_games_list.append({
                         "聯賽": league_name,
-                        "時間": game_time,
+                        "時間": game_time,  # 這裡已經是乾淨的台灣時間了
                         "對戰組合": f"{h_name_zh} VS {a_name_zh}",
                         "主/客/和 機率": f"{h_p:.1f}% / {a_p:.1f}% / {d_p:.1f}%",
                         "賠率": f"{h_o} / {a_o} / {d_o}",
@@ -158,12 +164,11 @@ def run_prediction_system():
         
         print("☁️ 正在同步至 GitHub...")
         os.system('git add .')
-        os.system(f'git commit -m "手動更新 {date_str} 盤口預測數據"')
+        os.system(f'git commit -m "手動更新 {date_str} 盤口預測數據 (含台灣時間)"')
         os.system('git push')
         print("🎉 雲端備份完成！程式執行結束。")
     else:
         print(f"\n目前無 {date_str} 賽事數據。程式執行結束。")
 
-# 這裡把排程拔掉了，程式只會從這裡單純地呼叫執行一次
 if __name__ == "__main__":
     run_prediction_system()
