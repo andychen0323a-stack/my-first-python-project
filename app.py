@@ -34,25 +34,35 @@ csv_files = glob.glob("advanced_odds_*.csv")
 if not csv_files:
     st.info("⚠️ 正在等待雲端伺服器產出今日賽事數據，請稍後再回來看！")
 else:
-    latest_file = max(csv_files, key=os.path.getctime)
+    # 🛡️ 【關鍵修復】放棄 os.path.getctime，改用文字排序嚴格對齊日期數字！
+    latest_file = max(csv_files) 
     df = pd.DataFrame(pd.read_csv(latest_file))
-    date_str = latest_file.split('_')[2].split('.')[0]
     
-    # 🛡️ 【關鍵防呆機制】如果讀到舊版沒有「資金分配」的檔案，自動補上預設值避免閃退
-    if '資金分配' not in df.columns:
-        df['資金分配'] = "觀望 (0%)"
-    if '聯賽' not in df.columns:
-        df['聯賽'] = "未知"
+    # 提取檔名中的日期
+    try:
+        date_str = latest_file.split('_')[2].split('.')[0]
+    except:
+        date_str = "20260518"
+    
+    # 欄位防呆保護
+    if '資金分配' not in df.columns: df['資金分配'] = "觀望 (0%)"
+    if '聯賽' not in df.columns: df['聯賽'] = "未知"
 
     with st.sidebar:
         st.success(f"📅 數據日期: \n**{date_str[:4]}/{date_str[4:6]}/{date_str[6:]}**")
         selected_league = st.selectbox("🎯 篩選特定聯賽", ["全部"] + list(df['聯賽'].unique()))
 
-    # 數據清洗 (轉換凱利值)
+    # 數據清洗 (精準轉換凱利值)
     def extract_kelly_fund(val):
+        if not isinstance(val, str): return 0.0
         if "觀望" in val or "和局" in val: return 0.0
-        try: return float(val.split(" ")[1].replace("%", ""))
-        except: return 0.0
+        try:
+            parts = val.split(" ")
+            if len(parts) >= 2:
+                return float(parts[1].replace("%", ""))
+        except:
+            pass
+        return 0.0
         
     df['投資價值(%)'] = df['資金分配'].apply(extract_kelly_fund)
     
@@ -90,7 +100,7 @@ else:
             fig.update_traces(textposition='outside')
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("😴 今日賽事中，AI 尚未發現具備正期望值 (EV>0) 的投資標的，或是目前讀取到舊版報表，建議觀望。")
+            st.info("😴 今日賽事中，AI 尚未發現具備正期望值 (EV>0) 的投資標的，建議觀望。")
 
     with tab2:
         st.dataframe(
