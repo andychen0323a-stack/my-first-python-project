@@ -16,7 +16,7 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# 🌍 【新增：全球頂尖球隊中英文對譯字典】
+# 🌍 全球頂尖球隊中英文對譯字典
 TEAM_TRANSLATIONS = {
     # NBA 籃球
     "Thunder": "奧克拉荷馬雷霆", "Spurs": "聖安東尼奧馬刺",
@@ -37,7 +37,7 @@ TEAM_TRANSLATIONS = {
     "Padres": "聖地牙哥教士", "Dodgers": "洛杉磯道奇",
     "Diamondbacks": "亞利桑那響尾蛇", "Giants": "舊金山巨人",
     
-    # 足球五大聯賽 (英超/西甲/義甲/德甲/法甲精選)
+    # 足球五大聯賽
     "Arsenal": "阿森納", "阿森納": "阿森納", 
     "Burnley": "伯恩利", "Burnley ": "伯恩利",
     "Man City": "曼城", "Man United": "曼聯", "Liverpool": "利物浦",
@@ -46,39 +46,28 @@ TEAM_TRANSLATIONS = {
 }
 
 # 🛠️ 翻譯核心函式
-def translate_matchup(matchup_str):
+def translate_matchup(matchup_str, league_name):
     if not isinstance(matchup_str, str):
         return matchup_str
     
-    # 清理並統一過濾掉球隊文字後面的表情符號
-    emojis = ["🏀", "⚾", "⚽", "🏐"]
+    # 清除表情符號
     clean_str = matchup_str
-    for emoji in emojis:
+    for emoji in ["🏀", "⚾", "⚽", "🏐"]:
         clean_str = clean_str.replace(emoji, "")
         
-    # 切割對戰組合 (例如 "Thunder VS Spurs")
     if " VS " in clean_str:
         teams = clean_str.split(" VS ")
-        team1 = teams[0].strip()
-        team2 = teams[1].strip()
+        t1 = TEAM_TRANSLATIONS.get(teams[0].strip(), teams[0].strip())
+        t2 = TEAM_TRANSLATIONS.get(teams[1].strip(), teams[1].strip())
         
-        # 進行字典查表，查不到就留原名
-        t1_zh = TEAM_TRANSLATIONS.get(team1, team1)
-        t2_zh = TEAM_TRANSLATIONS.get(team2, team2)
-        
-        # 根據聯賽類型補回對應的乾淨表情符號
-        if "NBA" in str(st.session_state.get('current_league', '')):
-            return f"🏀 {t1_zh} VS {t2_zh}"
-        elif "MLB" in str(st.session_state.get('current_league', '')):
-            return f"⚾ {t1_zh} VS {t2_zh}"
-        elif "超" in str(st.session_state.get('current_league', '')) or "甲" in str(st.session_state.get('current_league', '')):
-            return f"⚽ {t1_zh} VS {t2_zh}"
-        else:
-            return f"{t1_zh} VS {t2_zh}"
+        if "NBA" in str(league_name): return f"🏀 {t1} VS {t2}"
+        elif "MLB" in str(league_name): return f"⚾ {t1} VS {t2}"
+        elif "超" in str(league_name) or "甲" in str(league_name): return f"⚽ {t1} VS {t2}"
+        return f"{t1} VS {t2}"
             
     return matchup_str
 
-# 2. 側邊欄設計 (Sidebar)
+# 2. 側邊欄設計
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/000000/bullish.png", width=60)
     st.title("控制中心")
@@ -87,16 +76,16 @@ with st.sidebar:
     st.write("🧮 **資金模型**: 凱利準則 (Kelly Criterion)")
     st.markdown("---")
 
-# 3. 主畫面標題區塊
+# 3. 主畫面標題
 st.title("📈 AI 量化決策戰情室")
 st.markdown("自動化抓取五大聯賽與美洲賽事，透過機器學習尋找最高 EV 價值的投資標的。")
 
-# 4. 讀取數據邏輯
+# 4. 讀取數據
 csv_files = glob.glob("advanced_odds_*.csv")
 if not csv_files:
     st.info("⚠️ 正在等待雲端伺服器產出今日賽事數據，請稍後再回來看！")
 else:
-    # 嚴格按檔名排序抓最新檔案
+    # 嚴格按文字排序抓最新日期檔案
     latest_file = max(csv_files) 
     df = pd.DataFrame(pd.read_csv(latest_file))
     
@@ -105,41 +94,39 @@ else:
     except:
         date_str = "20260518"
     
+    # 確保基本欄位存在
     if '資金分配' not in df.columns: df['資金分配'] = "觀望 (0%)"
     if '聯賽' not in df.columns: df['聯賽'] = "未知"
+    if '對戰組合' not in df.columns: df['對戰組合'] = "未知賽事"
 
     with st.sidebar:
         st.success(f"📅 數據日期: \n**{date_str[:4]}/{date_str[4:6]}/{date_str[6:]}**")
         selected_league = st.selectbox("🎯 篩選特定聯賽", ["全部"] + list(df['聯賽'].unique()))
 
-    # 將當前篩選狀態塞入 session，方便翻譯函式判斷圖標
-    st.session_state['current_league'] = selected_league if selected_league != "全部" else "混合"
-
-    # 數據清洗與「動態即時中文翻譯」
-    df['對戰組合'] = df.apply(
-        lambda row: (st.session_state.update({'current_league': row['聯賽']}) or True) and translate_matchup(row['對戰組合']), 
-        axis=1
-    )
-    
-    def extract_kelly_fund(val):
+    # 🛡️ 【核心修正】強固的數字提取邏輯，徹底解決 CSV 無空格導致的切碎崩潰
+    def extract_kelly_fund_robust(val):
         if not isinstance(val, str): return 0.0
-        if "觀望" in val or "和局" in val: return 0.0
+        if "觀望" in val or "0%" in val: return 0.0
         try:
-            parts = val.split(" ")
-            if len(parts) >= 2:
-                return float(parts[1].replace("%", ""))
+            # 只要文字裡有出現 %，就把百分比前面的數字死挖出來
+            if "%" in val:
+                num_str = "".join([c for c in val if c.isdigit() or c == '.'])
+                return float(num_str)
         except:
             pass
         return 0.0
         
-    df['投資價值(%)'] = df['資金分配'].apply(extract_kelly_fund)
+    df['投資價值(%)'] = df['資金分配'].apply(extract_kelly_fund_robust)
+    
+    # 執行即時全中文翻譯
+    df['對戰組合'] = df.apply(lambda row: translate_matchup(row['對戰組合'], row['聯賽']), axis=1)
     
     if selected_league != "全部":
         df = df[df['聯賽'] == selected_league]
 
     valuable_bets = df[df['投資價值(%)'] > 0]
 
-    # 5. 頂部 KPI 數據卡片 (Metrics)
+    # 5. 頂部 KPI 卡片
     st.markdown("### 📊 今日盤口速報")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -147,11 +134,13 @@ else:
     with col2:
         st.metric("發現價值注 (EV>0)", f"{len(valuable_bets)} 場", "高勝率機會" if len(valuable_bets)>0 else "")
     with col3:
-        st.metric("最高建議資金佔比", f"{df['投資價值(%)'].max()}%" if len(valuable_bets) > 0 else "0%")
+        # 修正顯示格式
+        max_val = df['投資價值(%)'].max() if len(df) > 0 else 0.0
+        st.metric("最高建議資金佔比", f"{max_val}%")
 
     st.markdown("---")
 
-    # 6. 分頁系統 (Tabs)
+    # 6. 分頁系統
     tab1, tab2 = st.tabs(["📉 資金配置圖表", "📋 完整賽事明細"])
 
     with tab1:
@@ -168,7 +157,7 @@ else:
             fig.update_traces(textposition='outside')
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("😴 今日賽事中，AI 尚未發現具備正期望值 (EV>0) 的投資標的，建議觀望。")
+            st.info("😴 今日賽事中，AI 建議全面空手觀望，請至『完整賽事明細』查看今日監控清單。")
 
     with tab2:
         st.dataframe(
