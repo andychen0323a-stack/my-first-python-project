@@ -4,7 +4,7 @@ import glob
 import os
 import plotly.express as px
 
-# 1. 頁面基本設定
+# 1. 頁面基本設定 (採用 2026 Streamlit 最新規範)
 st.set_page_config(page_title="AI 體育量化決策系統", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 
 hide_st_style = """
@@ -16,7 +16,7 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# 🌍 全球球隊中英文對譯字典 (改用關鍵字模糊匹配)
+# 🌍 全球球隊中英文對譯字典 (超強模糊比對)
 TEAM_MAP = {
     "Thunder": "奧克拉荷馬雷霆", "Spurs": "聖安東尼奧馬刺",
     "Marlins": "邁阿密馬林魚", "Braves": "亞特蘭大勇士",
@@ -43,7 +43,6 @@ def translate_matchup_fuzzy(matchup_str, league_name):
     if not isinstance(matchup_str, str):
         return matchup_str
     
-    # 移除所有常見體育表情符號，便於純文字比對
     clean_str = matchup_str
     for emoji in ["🏀", "⚾", "⚽", "🏐"]:
         clean_str = clean_str.replace(emoji, "")
@@ -53,7 +52,7 @@ def translate_matchup_fuzzy(matchup_str, league_name):
         t1 = teams[0].strip()
         t2 = teams[1].strip()
         
-        # 模糊比對：只要字典裡的英文鍵出現在字串中，就直接替換
+        # 只要字串裡包含字典裡的英文字，管他前後有沒有黏膠或表情符號，通通暴力換成中文
         for eng, zh in TEAM_MAP.items():
             if eng.lower() in t1.lower(): t1 = zh
             if eng.lower() in t2.lower(): t2 = zh
@@ -98,7 +97,7 @@ else:
         st.success(f"📅 數據日期: \n**{date_str[:4]}/{date_str[4:6]}/{date_str[6:]}**")
         selected_league = st.selectbox("🎯 篩選特定聯賽", ["全部"] + list(df['聯賽'].unique()))
 
-    # 強固的數字提取
+    # 提取數字
     def extract_kelly_fund_robust(val):
         if not isinstance(val, str): return 0.0
         if "觀望" in val or "0%" in val: return 0.0
@@ -112,7 +111,7 @@ else:
         
     df['投資價值(%)'] = df['資金分配'].apply(extract_kelly_fund_robust)
     
-    # 模糊翻譯對戰組合
+    # 全中文翻譯對戰組合
     df['對戰組合'] = df.apply(lambda row: translate_matchup_fuzzy(row['對戰組合'], row['聯賽']), axis=1)
     
     if selected_league != "全部":
@@ -148,19 +147,19 @@ else:
                 template='plotly_dark'
             )
             fig.update_traces(textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("😴 今日賽事中，AI 建議全面空手觀望，請至『完整賽事明細』查看今日監控清單。")
 
     with tab2:
-        # 🛡️ 【重大修正】絕對不 drop 任何欄位！CSV 有什麼就秀什麼，保證比分推薦欄位完美保留！
+        # 🛡️ 絕對不刪除任何欄位！CSV 裡所有的欄位（包含正確比分推薦）全數完整保留
         display_df = df.copy()
         if '投資價值(%)' in display_df.columns:
             display_df = display_df.drop(columns=['投資價值(%)'])
             
         st.dataframe(
             display_df, 
-            use_container_width=True, 
+            width="stretch", 
             height=500,
             hide_index=True 
         )
