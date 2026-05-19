@@ -4,7 +4,7 @@ import glob
 import os
 import plotly.express as px
 
-# 1. 頁面基本設定 (採用 2026 Streamlit 最新規範)
+# 1. 頁面基本設定
 st.set_page_config(page_title="AI 體育量化決策系統", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 
 hide_st_style = """
@@ -16,32 +16,35 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# 🌍 全球球隊中英文對譯字典 (超強模糊比對)
+# 🌍 【超級鋼鐵字典】全美職棒、全美職籃、歐洲足球全收錄！
 TEAM_MAP = {
-    "Thunder": "奧克拉荷馬雷霆", "Spurs": "聖安東尼奧馬刺",
-    "Marlins": "邁阿密馬林魚", "Braves": "亞特蘭大勇士",
-    "Rays": "坦帕灣光芒", "Orioles": "巴爾地摩金鶯",
-    "Phillies": "費城費城人", "Reds": "辛辛那提紅人",
-    "Tigers": "底特律老虎", "Guardians": "克里夫蘭守護者",
-    "Nationals": "華盛頓國民", "Mets": "紐約大都會",
-    "Yankees": "紐約洋基", "Blue Jays": "多倫多藍鳥",
-    "Royals": "堪薩斯皇家", "Red Sox": "波士頓紅襪",
-    "Twins": "明尼蘇達雙城", "Astros": "休士頓太空人",
-    "Cubs": "芝加哥小熊", "Brewers": "密爾瓦基釀酒人",
-    "Rockies": "科羅拉多洛磯", "Rangers": "德州遊騎兵",
-    "Angels": "洛杉磯天使", "Athletics": "奧克蘭運動家",
-    "Mariners": "西雅圖水手", "White Sox": "芝加哥白襪",
-    "Padres": "聖地牙哥教士", "Dodgers": "洛杉磯道奇",
-    "Diamondbacks": "亞利桑那響尾蛇", "Giants": "舊金山巨人",
-    "Arsenal": "阿森納", "Burnley": "伯恩利",
-    "Man City": "曼城", "Man United": "曼聯", "Liverpool": "利物浦",
-    "Chelsea": "切爾西", "Tottenham": "熱刺", "Real Madrid": "皇家馬德里",
-    "Barcelona": "巴塞隆納", "Bayern": "拜仁慕尼黑", "PSG": "巴黎聖日耳曼"
+    # === NBA 籃球 (全 30 隊) ===
+    "Celtics": "波士頓塞爾提克", "Bucks": "密爾瓦基公鹿", "76ers": "費城76人", "Cavaliers": "克里夫蘭騎士",
+    "Knicks": "紐約尼克", "Nets": "布魯克林籃網", "Hawks": "亞特蘭大老鷹", "Heat": "邁阿密熱火",
+    "Raptors": "多倫多暴龍", "Bulls": "芝加哥公牛", "Pacers": "印第安納溜馬", "Wizards": "華盛頓巫師",
+    "Magic": "奧蘭多魔術", "Hornets": "夏洛特黃蜂", "Pistons": "底特律活塞", "Nuggets": "丹佛金塊",
+    "Grizzlies": "曼非斯灰熊", "Kings": "沙加緬度國王", "Suns": "鳳凰城太陽", "Clippers": "洛杉磯快艇",
+    "Warriors": "金州勇士", "Lakers": "洛杉磯湖人", "Timberwolves": "明尼蘇達灰狼", "Pelicans": "紐奧良鵜鶘",
+    "Thunder": "奧克拉荷馬雷霆", "Mavericks": "達拉斯獨行俠", "Jazz": "猶他爵士", "Blazers": "波特蘭拓荒者",
+    "Spurs": "聖安東尼奧馬刺", "Rockets": "休士頓火箭",
+    
+    # === MLB 棒球 (全 30 隊) ===
+    "Yankees": "紐約洋基", "Red Sox": "波士頓紅襪", "Orioles": "巴爾地摩金鶯", "Rays": "坦帕灣光芒", "Blue Jays": "多倫多藍鳥",
+    "Guardians": "克里夫蘭守護者", "Twins": "明尼蘇達雙城", "Royals": "堪薩斯皇家", "Tigers": "底特律老虎", "White Sox": "芝加哥白襪",
+    "Astros": "休士頓太空人", "Mariners": "西雅圖水手", "Rangers": "德州遊騎兵", "Angels": "洛杉磯天使", "Athletics": "奧克蘭運動家",
+    "Braves": "亞特蘭大勇士", "熱愛": "邁阿密馬林魚", "Marlins": "邁阿密馬林魚", "Mets": "紐約大都會", "Phillies": "費城費城人", "Nationals": "華盛頓國民",
+    "Brewers": "密爾瓦基釀酒人", "Cubs": "芝加哥小熊", "Cardinals": "聖路易紅雀", "Pirates": "匹茲堡海盜", "Reds": "辛辛那提紅人",
+    "Dodgers": "洛杉磯道奇", "Giants": "舊金山巨人", "Padres": "聖地牙哥教士", "Diamondbacks": "亞利桑那響尾蛇", "Rockies": "科羅拉多洛磯",
+
+    # === 足球五大聯賽熱門 ===
+    "Arsenal": "阿森納", "Burnley": "伯恩利", "Man City": "曼城", "Man United": "曼聯", "Liverpool": "利物浦",
+    "Chelsea": "切爾西", "Tottenham": "熱刺", "Aston Villa": "阿斯頓維拉", "Newcastle": "紐卡索聯",
+    "Real Madrid": "皇家馬德里", "Barcelona": "巴塞隆納", "Atletico": "馬德里競技",
+    "Bayern": "拜仁慕尼黑", "Dortmund": "多特蒙德", "Inter": "國際米蘭", "Milan": "AC米蘭", "Juventus": "尤文圖斯", "PSG": "巴黎聖日耳曼"
 }
 
 def translate_matchup_fuzzy(matchup_str, league_name):
-    if not isinstance(matchup_str, str):
-        return matchup_str
+    if not isinstance(matchup_str, str): return matchup_str
     
     clean_str = matchup_str
     for emoji in ["🏀", "⚾", "⚽", "🏐"]:
@@ -52,7 +55,7 @@ def translate_matchup_fuzzy(matchup_str, league_name):
         t1 = teams[0].strip()
         t2 = teams[1].strip()
         
-        # 只要字串裡包含字典裡的英文字，管他前後有沒有黏膠或表情符號，通通暴力換成中文
+        # 只要新一天的球隊名字有出現在強大字典裡，立刻強制對譯成中文！
         for eng, zh in TEAM_MAP.items():
             if eng.lower() in t1.lower(): t1 = zh
             if eng.lower() in t2.lower(): t2 = zh
@@ -88,7 +91,7 @@ else:
     try:
         date_str = latest_file.split('_')[2].split('.')[0]
     except:
-        date_str = "20260518"
+        date_str = "20260519"
     
     if '資金分配' not in df.columns: df['資金分配'] = "觀望 (0%)"
     if '聯賽' not in df.columns: df['聯賽'] = "未知"
@@ -152,7 +155,7 @@ else:
             st.info("😴 今日賽事中，AI 建議全面空手觀望，請至『完整賽事明細』查看今日監控清單。")
 
     with tab2:
-        # 🛡️ 絕對不刪除任何欄位！CSV 裡所有的欄位（包含正確比分推薦）全數完整保留
+        # 🛡️ 雙重保險：絕對保留 CSV 的原始所有欄位（包括足球正確比分推薦）
         display_df = df.copy()
         if '投資價值(%)' in display_df.columns:
             display_df = display_df.drop(columns=['投資價值(%)'])
